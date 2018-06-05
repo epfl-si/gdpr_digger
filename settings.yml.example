@@ -1,0 +1,9 @@
+# Configuration file
+---
+inform:
+  db:
+    host: localhost
+    user: add_your_own_here
+    password: add_your_own_here
+    database: add_your_own_here
+  httpd_log_path: /var/www/httpd/inform.epfl.ch-access_log

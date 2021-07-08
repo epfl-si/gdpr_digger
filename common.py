@@ -1,3 +1,4 @@
+import csv
 import logger
 import mysql.connector
 import os
@@ -7,7 +8,26 @@ import yaml
 
 # with open(os.path.join(os.path.dirname(__file__), 'settings.yml'), 'r') as f:
 with open("./settings.yml", 'r') as f:
-	settings = yaml.load(f)
+	settings = yaml.load(f, Loader=yaml.FullLoader)
+
+# return the minimal set of keys for an heterogeneous list of dictionaries
+def common_keys(data):
+	keys=[]
+	for d in data:
+		for k, v in d.items():
+			if v is not None and v != '':
+				keys.append(k)
+	keys = list(dict.fromkeys(keys))
+	return keys
+
+def write_csv(path, data, keys=None):
+	if keys is None:
+		keys=common_keys(data)
+	with open(path, 'w') as csvfile:
+		w = csv.DictWriter(csvfile, fieldnames=keys, extrasaction='ignore', restval="")
+		w.writeheader()
+		w.writerows(data)
+
 
 
 def mysql_connect_or_die(database, user, password, host="localhost", port=3306, ssh=None):
@@ -16,7 +36,9 @@ def mysql_connect_or_die(database, user, password, host="localhost", port=3306, 
 	if ssh is not None:
 		connect_host='127.0.0.1'
 		connect_port=ssh['port']
-		os.system("ssh -L {}:127.0.0.1:{} {}@{} &".format(ssh['port'], port, ssh['user'], ssh['host']))
+		cmd = "ssh -L {}:127.0.0.1:{} {}@{} &".format(ssh['port'], port, ssh['user'], ssh['host'])
+		print(cmd)
+		os.system(cmd)
 		print("Sleeping")
 		time.sleep(10)
 		print("Waking up")
@@ -26,7 +48,7 @@ def mysql_connect_or_die(database, user, password, host="localhost", port=3306, 
 def read_data(fname):
 	input_data=None
 	with open(fname, 'r') as f:
-		input_data = yaml.load(f)
+		input_data = yaml.load(f, Loader=yaml.FullLoader)
 	return input_data
 
 def print_header(first_name, last_name, email, sciper):

@@ -10,30 +10,100 @@ import yaml
 
 from common import *
 
-
-class PeopleGDPR:
-	def __init__(self):
-		self.settings = settings['people']
-
+class PeopleDB:
+	def __init__(self, dbname, dbs_config):
 		# Read DB credentials from secrets file
-		r = re.compile(r'^cv\t')
-		f = open(self.settings['dbs_config'], 'r')
+		r = re.compile(r'^'+dbname+'\t')
+		f = open(dbs_config, 'r')
 		while True:
 			line = f.readline().rstrip('\n')
 			if not line:
 				raise "Could not find db configuration"
 			if r.search(line) is not None:
+				self.dbname = dbname
 				c=re.split("\t+",line)
-				self.settings['db']={
+				self.dbcredentials={
 					"host": "localhost",
 					"port": "33069",
 					"user": c[3],
 					"password": c[4],
-					"database": 'cv'
+					"database": dbname
 				}
 				break
-		print("DB CONFIG", self.settings['db'])
-		self.db = None;
+		print("DB CONFIG for ", dbname, ": ", self.dbcredentials)
+		self.db = mysql_connect_or_die(**self.dbcredentials)
+
+	def ensureDB(self):
+		if self.db is None:
+			self.db=mysql_connect_or_die(**self.dbcredentials)
+
+	def tables(self):
+		cursor = self.db.cursor()
+		cursor.execute("SHOW TABLES") 
+		return list(map(lambda t: t[0], cursor.fetchall()))
+
+	def fields(self, tname):
+		sql = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='%s' AND `TABLE_NAME`='%s'" 
+		cursor = self.db.cursor()
+		cursor.execute(sql % (self.dbname, tname))
+		return list(map(lambda n: n[0], cursor.fetchall()))
+
+	def search1(self, tables, first_name, last_name, email, sciper):
+		self.ensureDB()
+
+		cursor2 = self.db.cursor(dictionary=True, buffered=True)
+		cursor3 = self.db.cursor(dictionary=True, buffered=True)
+
+		data={}
+
+		# return a list of dictionaries (each with different keys)
+		hdata=[]		
+		for table_name, table_columns in tables.items():
+			sql="SELECT {} from {} where sciper={}".format("sciper,"+(",".join(table_columns)), table_name, sciper)
+			cursor3.execute(sql)
+			records = cursor3.fetchall()
+			if (len(records)>0):
+				print ("--- Table: {} found {} records".format(table_name, len(records)))
+				for row in records:
+					print(row)
+					row['table']=table_name
+					hdata.append(row)
+			else:
+				print ("--- Table: nothing found")
+
+		return hdata
+
+	# return a list of {dbname: xx, tablename: xx, filedname: xx, value: xx}
+	def search2(self, email, sciper):
+		ret = []
+		self.ensureDB()
+		tables = self.tables()
+		for t in tables:
+			field_values = [("mail", email), ("email", email), ("e-mail", email), ("sciper", str(sciper)) ]
+			cols = self.fields(t)
+			for (fn, fv) in field_values:
+				if fn in cols:
+					cursor = self.db.cursor(dictionary=True)
+					# sql="SELECT * from " + t + " where %s = %s"
+					# cursor.execute(sql, [fn, fv])
+					sql="SELECT * from " + t + " where %s = '%s'"
+					cursor.execute(sql % (fn, fv))
+					lines = cursor.fetchall()
+					if len(lines) > 0:
+						for l in lines:
+							for k, v in l.items():
+								if v != None:
+									ret.append({'db': self.dbname, 'table': t, 'field': k, 'value': v})
+		return ret
+
+class PeopleGDPR:
+	def __init__(self):
+		self.settings = settings['people']
+		# self.dbs = map(lambda n: PeopleDB(n, self.settings['dbs_config']), self.settings['dbnames']) 
+		self.dbs = []
+		for n in self.settings['dbnames']:
+			db = PeopleDB(n, self.settings['dbs_config'])
+			self.dbs.append(db)
 
 	def __str__():
 		# TODO
@@ -44,10 +114,12 @@ class PeopleGDPR:
 		# TODO
 		return
 
-	def ensureDB(self):
-		if self.db is None:
-			self.db=mysql_connect_or_die(**self.settings['db'])
-			print(self.db)
+	def searchDB(self, first_name, last_name, email, sciper):
+		# print(self.dbs[0].tables())
+		ret=[]
+		for db in self.dbs:
+			ret += db.search2(email, sciper)
+		return ret
 
 	def searchLogs(self, first_name, last_name, email, sciper):
 		#                   ^.*? ([\d.]+) - - \[(.*?)\] "GET \/stefan\.peters/edit(.*?)" (\d+) (-|\d+) "(.*?)" .*$
@@ -65,11 +137,13 @@ class PeopleGDPR:
 			# First cache log files locally to avoit extra load to the server
 			logdir = "data/people/logs/{}/".format(re.sub("^.*@|\..*$", "", server))
 			os.makedirs(logdir, exist_ok=True)
+			print("Syncing logs for server {}".format(server))
 			ret = subprocess.run(["/usr/bin/rsync", "-a", "{}:{}/access.log-*.gz".format(server,self.settings['log_dir']), "{}/".format(logdir)])
+			print("Synced logs for server {} : return value: {}".format(server, ret))
 			# for path in glob.glob("{logidr}/access.log-*.gz"):
-			# for path in glob.glob(logdir + "access.log-*.gz"):
-			for path in glob.glob(logdir + "access.log-20210314.gz"):
-
+			# for path in glob.glob(logdir + "access.log-20210314.gz"):
+			for path in glob.glob(logdir + "access.log-*.gz"):
+				print("Seraching {}".format(path))
 				gz = gzip.open(path, 'rb')
 				f = io.BufferedReader(gz)
 				for line in f.readlines():
@@ -95,8 +169,8 @@ class PeopleGDPR:
 		print(re2)
 		for server in self.settings['servers']:
 			logdir = "data/people/logs/{}/".format(re.sub("^.*@|\..*$", "", server))
-			# for path in glob.glob(logdir + "access.log-*.gz"):
-			for path in glob.glob(logdir + "access.log-20210314.gz"):
+			# for path in glob.glob(logdir + "access.log-20210314.gz"):
+			for path in glob.glob(logdir + "access.log-*.gz"):
 				gz = gzip.open(path, 'rb')
 				f = io.BufferedReader(gz)
 				for line in f.readlines():
@@ -108,58 +182,6 @@ class PeopleGDPR:
 						logfile_events.append({'comment': 'possible website interaction', 'server': server, 'from': g[0], 'ts': g[1], 'request': g[2]})
 		return logfile_events
 
-
-	def searchDB(self, first_name, last_name, email, sciper):
-		TABLES={
-			"cv" : ["curriculum", "expertise", "mission"],
-			"common" : ["tel_prive", "nat", "web_perso"],
-			"logs" : ["ts", "msg"],
-			"edu" : ["title", "field", "director", "univ", "dates"],
-			"parcours" : ["title", "field", "univ", "dates"],
-			"awards" : ["title", "field", "dates"],
-			"profresearch" : ["col1", "col2", "col3", "col4", "col5", "skills", "parcours", "awds", "col9", "wos", "orcid", "biblioprofile", "scopus", "col11", "col12", "col13", "googlescholar"],
-			"publications" : ["auteurspub", "titrepub", "revuepub", "urlpub"],
-			"research_ids" : ["tag", "content"],
-			"teachingact" : ["pdocs", "tsect", "phdstuds", "cours", "ts"],
-		}
-		self.ensureDB()
-
-		cursor2 = self.db.cursor(dictionary=True, buffered=True)
-		cursor3 = self.db.cursor(dictionary=True, buffered=True)
-
-
-		data={}
-
-		print("\n-------------------------------------------- Search all tables in the DB")
-
-		# return a list of dictionaries (each with different keys)
-		hdata=[]		
-		for table_name, table_columns in TABLES.items():
-			sql="SELECT {} from {} where sciper={}".format("sciper,"+(",".join(table_columns)), table_name, sciper)
-			cursor3.execute(sql)
-			records = cursor3.fetchall()
-			if (len(records)>0):
-				print ("--- Table: {} found {} records".format(table_name, len(records)))
-				for row in records:
-					print(row)
-					row['table']=table_name
-					hdata.append(row)
-			else:
-				print ("--- Table: nothing found")
-
-		return hdata
-		# data=[]
-		# for d in hdata:
-		# 	r=[]
-		# 	for k in keys:
-		# 		if k in d:
-		# 			r.append(d[k])
-		# 		else:
-		# 			r.append('')
-		# 	data.append(r)
-		# return (keys, data)
-
-
 if __name__ == '__main__':
 
 	s=PeopleGDPR()
@@ -167,11 +189,15 @@ if __name__ == '__main__':
 	input_data = read_data("./data.yml")
 
 	for user in input_data:
+		udir="Results/{}".format(user['sciper'])
+		if not os.path.exists(udir):
+		    os.makedirs(udir)
 		print_header(**user)
-		data=s.searchDB(**user)
+		data = s.searchDB(**user)
 		keys=common_keys(data)
 		keys.remove('table')
 		keys.insert(0, 'table')
-		write_csv('peopleDB_{}.csv'.format(user['sciper']), data, keys)
+		write_csv('{}/peopleDB.csv'.format(udir), data, keys)
+
 		data=s.searchLogs(**user)
-		write_csv('peopleAccessLogs_{}.csv'.format(user['sciper']), data)
+		write_csv('{}/peopleAccessLogs.csv'.format(udir), data)

@@ -83,16 +83,10 @@ if __name__ == '__main__':
 	input_data = read_data("./data.yml")
 	output_data=[]
 	for user in input_data:
+		udir="Results/{}".format(user['sciper'])
+		if not os.path.exists(udir):
+		    os.makedirs(udir)
+
 		print_header(**user)
 		d=s.search(**user)
-		for k, v in user.items():
-			d[k] = v
-		output_data.append(d)
-
-	fieldnames=s.fieldnames
-
-	with open('blog.csv', 'w') as csvfile:
-		w = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
-		w.writeheader()
-		for d in output_data:
-			w.writerow(d)
+		write_csv('{}/blog.csv'.format(udir), d)

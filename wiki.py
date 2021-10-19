@@ -49,11 +49,11 @@ class WikiGDPR:
 			data["{} as {}".format(t, row['role'])] = row['n']
 
 			if t=="Wikis":
-				sql="SELECT wiki.id,wiki.label from objectRole INNER JOIN wiki ON objectRole.businessObjectId = wiki.id where (objectRole.principalName={} OR objectRole.principalLabel = '{} {}') AND objectRole.businessObjectClassName='ch.epfl.kis.polywiki.model.Wiki' AND objectRole.role='{}'".format(sciper, first_name, last_name, row['role'])
+				sql="SELECT wiki.id,wiki.label,wiki.name,objectRole.principalName,objectRole.principalLabel from objectRole INNER JOIN wiki ON objectRole.businessObjectId = wiki.id where (objectRole.principalName={} OR objectRole.principalLabel = '{} {}') AND objectRole.businessObjectClassName='ch.epfl.kis.polywiki.model.Wiki' AND objectRole.role='{}'".format(sciper, first_name, last_name, row['role'])
 				cursor2.execute(sql)
 				tt=[]
 				for row2 in cursor2:
-					print("    title: '{}'\n    user: {}/{}\n".format(row2['label'], row2['principalName'], row2['principalLabel']))
+					print("    name: '{}'\n    title: '{}'\n    user: {}/{}\n".format(row2['name'],row2['label'], row2['principalName'], row2['principalLabel']))
 					tt.append("'{}'".format(row2['label']))
 				data["Title of Wikis as {}".format(row['role'])]=" - ".join(tt)
 
@@ -64,7 +64,7 @@ class WikiGDPR:
 		print("Subscribed to {} wikis".format(c))
 		if c > 0:
 			data["Wikis as subscriber"] = c
-			sql="SELECT wiki.id,wiki.label from subscription INNER JOIN wiki ON subscription.wikiId = wiki.id where subscription.email = '{}'".format(email)
+			sql="SELECT wiki.id,wiki.label,wiki.name from subscription INNER JOIN wiki ON subscription.wikiId = wiki.id where subscription.email = '{}'".format(email)
 			cursor2.execute(sql)
 			tt=[]
 			for row2 in cursor2:
@@ -119,18 +119,22 @@ if __name__ == '__main__':
 	s=WikiGDPR()
 
 	input_data = read_data("./data.yml")
-	output_data=[]
+	# output_data=[]
 	for user in input_data:
+		udir="Results/{}".format(user['sciper'])
+		if not os.path.exists(udir):
+		    os.makedirs(udir)
+
 		print_header(**user)
 		d=s.search(**user)
-		for k, v in user.items():
-			d[k] = v
-		output_data.append(d)
+		write_csv('{}/wiki.csv'.format(udir), d)
 
-	fieldnames=s.fieldnames
 
-	with open('wiki.csv', 'w') as csvfile:
-		w = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
-		w.writeheader()
-		for d in output_data:
-			w.writerow(d)
+
+	# fieldnames=s.fieldnames
+
+	# with open('wiki.csv', 'w', newline='', encoding='utf-8') as csvfile:
+	# 	w = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
+	# 	w.writeheader()
+	# 	for d in output_data:
+	# 		w.writerow(d)

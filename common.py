@@ -23,7 +23,7 @@ def common_keys(data):
 def write_csv(path, data, keys=None):
 	if keys is None:
 		keys=common_keys(data)
-	with open(path, 'w') as csvfile:
+	with open(path, 'a', encoding='utf-8') as csvfile:
 		w = csv.DictWriter(csvfile, fieldnames=keys, extrasaction='ignore', restval="")
 		w.writeheader()
 		w.writerows(data)

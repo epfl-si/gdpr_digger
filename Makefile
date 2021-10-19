@@ -12,7 +12,7 @@ logs:
 
 .PHONY: inform
 inform: settings.yml up
-	python inform.py
+	PYTHONIOENCODING=utf8 python inform.py
 
 .PHONY: blog
 # blog is no longer active: no access to DB
@@ -21,18 +21,18 @@ inform: settings.yml up
 # 	@echo "ssh -L 33066:127.0.0.1:3306 kis@kissrv93.epfl.ch" 
 # 	python blog.py
 blog:
-	python blog_oc.py
+	PYTHONIOENCODING=utf8 python blog_oc.py
 
 .PHONY: wiki
 wiki: settings.yml
 	/bin/sh tunnel_wiki.sh start
-	python wiki.py 
+	PYTHONIOENCODING=utf8 python wiki.py 
 	/bin/sh tunnel_wiki.sh stop
 
 .PHONY: people
 people: settings.yml
 	/bin/sh tunnel_people.sh start
-	python people.py
+	PYTHONIOENCODING=utf8 python people.py
 # 	/bin/sh tunnel_people.sh stop
 
 settings.yml: settings.yml.example

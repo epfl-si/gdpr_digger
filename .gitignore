@@ -1,6 +1,8 @@
 *.yml
 giova.md
 mocs/
+/Results
+/data
 
 .DS_Store
 

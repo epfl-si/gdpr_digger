@@ -38,26 +38,33 @@ class BlogGDPR:
 		ret = subprocess.run([self.ks['bin'], 'exec', '-it', self.pod, '--', '/bin/sh', '-c', cmd], stdout=subprocess.PIPE)
 		print(ret.stdout)
 		data=ret.stdout
+		print(data)
 		return(data)
 
 if __name__ == '__main__':
 
 	s=BlogGDPR()
-	exit
 
 	input_data = read_data("./data.yml")
-	output_data=[]
+	# output_data=[]
 	for user in input_data:
+		udir="Results/{}".format(user['sciper'])
+		if not os.path.exists(udir):
+		    os.makedirs(udir)
+
 		print_header(**user)
 		d=s.search(**user)
-		for k, v in user.items():
-			d[k] = v
-		output_data.append(d)
+		write_csv('{}/people_oc.csv'.format(udir), d)
 
-	fieldnames=s.fieldnames
 
-	with open('blog.csv', 'w') as csvfile:
-		w = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
-		w.writeheader()
-		for d in output_data:
-			w.writerow(d)
+	# 	for k, v in user.items():
+	# 		d[k] = v
+	# 	output_data.append(d)
+
+	# fieldnames=s.fieldnames
+
+	# with open('{}/blog.csv'.format(udir), 'w') as csvfile:
+	# 	w = csv.DictWriter(csvfile, fieldnames=fieldnames, restval="")
+	# 	w.writeheader()
+	# 	for d in output_data:
+	# 		w.writerow(d)
